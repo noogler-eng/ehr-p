@@ -18,7 +18,7 @@ import { createBlockchainTransaction, getTransaction, getTransactionsByWallet } 
 import { upload, getFileUrl } from "../middleware/upload.js";
 
 const router = express.Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "AIzaSyB9WCwcmQDRsXSC8NjV6u5O63MLprkJ4LM");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // ==================== AUTHENTICATION ====================
 

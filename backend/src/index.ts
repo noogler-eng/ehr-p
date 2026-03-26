@@ -4,10 +4,10 @@
  * Handles MongoDB connection, API routes, and Swagger documentation
  */
 
+import 'dotenv/config';
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -18,9 +18,6 @@ import ehrRoutes from './routes/ehrRoutes.js';
 // Get directory name for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Load environment variables
-dotenv.config();
 
 // Initialize Express app
 const app = express();

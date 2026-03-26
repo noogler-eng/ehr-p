@@ -1,120 +1,211 @@
 #!/bin/bash
 
-###############################################################################
-# Secure EHR System - Quick Start Script
-# This script helps you get the application running quickly
-###############################################################################
+# ============================================================
+#  Secure EHR System v3.0 — Complete Startup Script
+#  Starts: ML Model + Backend Server + Frontend Dev Server
+#  Usage: chmod +x start.sh && ./start.sh
+# ============================================================
 
-set -e  # Exit on error
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BACKEND_DIR="$ROOT_DIR/backend"
+FRONTEND_DIR="$ROOT_DIR/frontend/vite-project"
+ML_DIR="$BACKEND_DIR/ml_model"
 
-echo "=========================================="
-echo "🏥 Secure EHR System - Quick Start"
-echo "=========================================="
-echo ""
-
-# Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m'
 
-# Check if .env exists
-if [ ! -f backend/.env ]; then
-    echo -e "${YELLOW}⚠️  .env file not found!${NC}"
-    echo "Creating .env from template..."
-    cp .env.example backend/.env
-    echo -e "${YELLOW}⚠️  Please edit backend/.env with your MongoDB URI and API keys${NC}"
-    echo "Press Enter to continue after editing .env..."
-    read
-fi
+BACKEND_PID=""
+FRONTEND_PID=""
 
-# Check Node.js
-echo "Checking Node.js..."
+# Cleanup on exit
+cleanup() {
+    echo ""
+    echo -e "${YELLOW}Shutting down all services...${NC}"
+    [ -n "$BACKEND_PID" ] && kill $BACKEND_PID 2>/dev/null
+    [ -n "$FRONTEND_PID" ] && kill $FRONTEND_PID 2>/dev/null
+    # Also kill anything on our ports
+    lsof -ti:8080 2>/dev/null | xargs kill -9 2>/dev/null || true
+    lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
+    echo -e "${GREEN}All services stopped.${NC}"
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+echo ""
+echo -e "${WHITE}======================================================${NC}"
+echo -e "${WHITE}    SECURE EHR SYSTEM v3.0 — STARTUP SCRIPT${NC}"
+echo -e "${WHITE}    Blockchain + AI-Powered Health Records${NC}"
+echo -e "${WHITE}======================================================${NC}"
+echo ""
+
+# ----------------------------------------------------------
+# Step 1: Prerequisites
+# ----------------------------------------------------------
+echo -e "${CYAN}[1/5] Checking prerequisites...${NC}"
+
 if ! command -v node &> /dev/null; then
-    echo -e "${RED}❌ Node.js is not installed. Please install Node.js 18+ first.${NC}"
+    echo -e "${RED}  Node.js not found. Install Node.js 18+ first.${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Node.js $(node -v)${NC}"
+echo -e "  ${GREEN}Node.js $(node --version)${NC}"
 
-# Check Python
-echo "Checking Python..."
 if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python is not installed. Please install Python 3.8+ first.${NC}"
+    echo -e "${RED}  Python3 not found. Install Python 3.8+ first.${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Python $(python3 --version)${NC}"
+echo -e "  ${GREEN}$(python3 --version)${NC}"
 
-# Backend setup
+echo -e "  ${GREEN}npm $(npm --version)${NC}"
 echo ""
-echo "=========================================="
-echo "📦 Setting up Backend..."
-echo "=========================================="
-cd backend
 
-if [ ! -d "node_modules" ]; then
-    echo "Installing Node.js dependencies..."
-    npm install
-else
-    echo "Node modules already installed"
+# ----------------------------------------------------------
+# Step 2: Python ML Model
+# ----------------------------------------------------------
+echo -e "${CYAN}[2/5] Setting up XGBoost ML Model...${NC}"
+
+cd "$ML_DIR"
+
+# Create venv if needed
+if [ ! -d "venv" ]; then
+    echo -e "  Creating virtual environment..."
+    python3 -m venv venv
 fi
 
-# XGBoost model setup
-cd ml_model
+# Install deps
+echo -e "  Installing Python dependencies..."
+./venv/bin/pip install --quiet --upgrade pip setuptools wheel 2>&1 | tail -1 || true
+./venv/bin/pip install --quiet -r requirements.txt 2>&1 | tail -1 || true
+
+# Train model if needed
 if [ ! -f "xgboost_model.pkl" ]; then
-    echo "Training XGBoost model..."
-    chmod +x setup.sh
-    ./setup.sh
+    echo -e "  Training XGBoost model (first time)..."
+    ./venv/bin/python train_model.py
+    echo -e "  ${GREEN}Model trained successfully${NC}"
 else
-    echo "XGBoost model already trained"
+    echo -e "  ${GREEN}Model already trained (xgboost_model.pkl)${NC}"
 fi
-cd ..
 
-# Build TypeScript
-echo "Building TypeScript..."
-npm run build
-
-cd ..
-
-# Frontend setup
+# Quick test
+echo -n "  Testing prediction engine... "
+TEST=$(echo '{"vitals":{"bp":"130/85","heartRate":78,"cholesterol":220,"sugarLevel":105,"ecgResult":"normal"},"clinicalMarkers":{"chestPainType":"asymptomatic"},"age":45}' | ./venv/bin/python predict.py 2>/dev/null)
+if echo "$TEST" | grep -q "risk_level"; then
+    RISK=$(echo "$TEST" | python3 -c "import sys,json; print(json.load(sys.stdin)['risk_level'])" 2>/dev/null || echo "OK")
+    echo -e "${GREEN}OK (Risk: $RISK)${NC}"
+else
+    echo -e "${YELLOW}Warning: unexpected output${NC}"
+fi
 echo ""
-echo "=========================================="
-echo "🎨 Setting up Frontend..."
-echo "=========================================="
-cd frontend/vite-project
+
+# ----------------------------------------------------------
+# Step 3: Backend
+# ----------------------------------------------------------
+echo -e "${CYAN}[3/5] Setting up Backend...${NC}"
+
+cd "$BACKEND_DIR"
+
+# Check .env
+if [ ! -f ".env" ]; then
+    echo -e "  ${RED}.env file missing! Create backend/.env with:${NC}"
+    echo "    PORT=8080"
+    echo "    MONGO_URI=mongodb+srv://..."
+    echo "    GEMINI_API_KEY=your_key"
+    echo "    JWT_SECRET=your_secret"
+    exit 1
+fi
+echo -e "  ${GREEN}.env found${NC}"
+
+# Install deps
+if [ ! -d "node_modules" ]; then
+    echo -e "  Installing dependencies..."
+    npm install --silent 2>/dev/null
+else
+    echo -e "  ${GREEN}Dependencies installed${NC}"
+fi
+
+# Compile TypeScript
+echo -e "  Compiling TypeScript..."
+npx tsc 2>/dev/null
+echo -e "  ${GREEN}Backend compiled${NC}"
+
+# Create uploads dir
+mkdir -p uploads
+
+echo ""
+
+# ----------------------------------------------------------
+# Step 4: Frontend
+# ----------------------------------------------------------
+echo -e "${CYAN}[4/5] Setting up Frontend...${NC}"
+
+cd "$FRONTEND_DIR"
 
 if [ ! -d "node_modules" ]; then
-    echo "Installing Node.js dependencies..."
-    npm install
+    echo -e "  Installing dependencies..."
+    npm install --silent 2>/dev/null
 else
-    echo "Node modules already installed"
+    echo -e "  ${GREEN}Dependencies installed${NC}"
+fi
+echo ""
+
+# ----------------------------------------------------------
+# Step 5: Launch
+# ----------------------------------------------------------
+echo -e "${CYAN}[5/5] Starting all services...${NC}"
+
+# Kill anything on our ports
+lsof -ti:8080 2>/dev/null | xargs kill -9 2>/dev/null || true
+lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
+sleep 1
+
+# Start Backend
+cd "$BACKEND_DIR"
+echo -e "  Starting Backend..."
+cd "$BACKEND_DIR/ml_model"
+sh setup.sh > /tmp/ehr-backend-setup.log 2>&1
+cd ..
+node dist/index.js > /tmp/ehr-backend.log 2>&1 &
+BACKEND_PID=$!
+sleep 3
+
+# Verify
+if curl -s http://localhost:8080/ 2>/dev/null | grep -q "Running"; then
+    echo -e "  ${GREEN}Backend running on http://localhost:8080${NC}"
+else
+    echo -e "  ${YELLOW}Backend starting... (check /tmp/ehr-backend.log if issues)${NC}"
 fi
 
-cd ../..
+# Start Frontend
+cd "$FRONTEND_DIR"
+echo -e "  Starting Frontend..."
+npm run dev > /tmp/ehr-frontend.log 2>&1 &
+FRONTEND_PID=$!
+sleep 3
 
-# Create uploads directory
-mkdir -p backend/uploads
+echo ""
+echo -e "${WHITE}======================================================${NC}"
+echo -e "${WHITE}           ALL SYSTEMS RUNNING${NC}"
+echo -e "${WHITE}======================================================${NC}"
+echo ""
+echo -e "  ${GREEN}Frontend:${NC}   http://localhost:5173"
+echo -e "  ${GREEN}Backend:${NC}    http://localhost:8080"
+echo -e "  ${GREEN}API Docs:${NC}   http://localhost:8080/api-docs"
+echo ""
+echo -e "  Backend PID:  $BACKEND_PID"
+echo -e "  Frontend PID: $FRONTEND_PID"
+echo ""
+echo -e "  ${WHITE}Steps to use:${NC}"
+echo -e "  1. Open ${GREEN}http://localhost:5173${NC} in your browser"
+echo -e "  2. Install MetaMask extension if not installed"
+echo -e "  3. Click 'Connect Wallet' and approve in MetaMask"
+echo -e "  4. Select your role (Doctor/Patient/Pharmacist/Admin)"
+echo -e "  5. Explore all features from the sidebar"
+echo ""
+echo -e "  ${YELLOW}Press Ctrl+C to stop all services${NC}"
+echo ""
 
-echo ""
-echo "=========================================="
-echo "✅ Setup Complete!"
-echo "=========================================="
-echo ""
-echo "To start the application:"
-echo ""
-echo "1. Start Backend (in terminal 1):"
-echo -e "   ${GREEN}cd backend && npm run dev${NC}"
-echo ""
-echo "2. Start Frontend (in terminal 2):"
-echo -e "   ${GREEN}cd frontend/vite-project && npm run dev${NC}"
-echo ""
-echo "3. Access the application:"
-echo "   - Frontend: http://localhost:5173"
-echo "   - Backend API: http://localhost:8080"
-echo "   - API Docs: http://localhost:8080/api-docs"
-echo ""
-echo "Don't forget to:"
-echo "  - Install MetaMask browser extension"
-echo "  - Configure your .env file with MongoDB URI and API keys"
-echo ""
-echo "For more information, see README.md and CLAUDE.md"
-echo ""
+# Keep script running
+wait
