@@ -1,0 +1,66 @@
+# Docker Compose Configuration for Secure EHR System
+# This file orchestrates all services needed to run the application
+
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: secure-ehr-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - MONGO_URI=${MONGO_URI}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - NODE_ENV=production
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/ml_model:/app/ml_model
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - ehr-network
+
+  # Frontend React Application
+  frontend:
+    build:
+      context: ./frontend/vite-project
+      dockerfile: Dockerfile
+    container_name: secure-ehr-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - ehr-network
+
+  # MongoDB Database (optional - use if not using MongoDB Atlas)
+  mongodb:
+    image: mongo:7.0
+    container_name: secure-ehr-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=securepassword
+      - MONGO_INITDB_DATABASE=secure_ehr_db
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    networks:
+      - ehr-network
+
+networks:
+  ehr-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
