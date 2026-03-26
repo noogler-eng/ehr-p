@@ -35,6 +35,7 @@ import { ChatSystem } from "./pages/ChatSystem";
 import { VitalsChart } from "./pages/VitalsChart";
 import { FollowUps } from "./pages/FollowUps";
 import { MedicationTracker } from "./pages/MedicationTracker";
+import { DischargeSummary } from "./pages/DischargeSummary";
 
 const API_BASE = "http://localhost:8080/api";
 
@@ -215,11 +216,13 @@ const App = () => {
       case "chat":
         return <ChatSystem account={account} userRole={user?.role || ""} userName={user?.name || ""} initialTarget={chatTarget} />;
       case "vitals":
-        return <VitalsChart patientAddress={viewingAddress || (user?.role === "Patient" ? account : "")} userRole={user?.role || ""} />;
+        return <VitalsChart patientAddress={viewingAddress || (user?.role === "Patient" ? account : "")} userRole={user?.role || ""} currentUserAddress={account} />;
       case "followups":
         return <FollowUps account={account} userRole={user?.role || ""} />;
       case "medications":
         return <MedicationTracker account={account} userRole={user?.role || ""} />;
+      case "discharge":
+        return <DischargeSummary account={account} userRole={user?.role || ""} viewingAddress={viewingAddress} />;
       default:
         return renderDashboard();
     }

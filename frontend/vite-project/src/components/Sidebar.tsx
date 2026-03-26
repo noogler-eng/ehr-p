@@ -1,4 +1,4 @@
-import { LayoutDashboard, Blocks, ShieldCheck, FileCode2, X, ChevronRight, MessageCircle, TrendingUp, CalendarClock, Pill } from "lucide-react";
+import { LayoutDashboard, Blocks, ShieldCheck, FileCode2, X, ChevronRight, MessageCircle, TrendingUp, CalendarClock, Pill, FileText } from "lucide-react";
 
 interface SidebarProps {
   currentPage: string;
@@ -14,6 +14,7 @@ const navItems = [
   { id: "vitals", label: "Vitals Trends", icon: TrendingUp, description: "Health Metrics Chart", roles: ["Doctor", "Patient", "Admin"] },
   { id: "followups", label: "Follow-Ups", icon: CalendarClock, description: "Appointment Schedule", roles: ["Doctor", "Patient"] },
   { id: "medications", label: "Med Tracker", icon: Pill, description: "Medication Adherence", roles: ["Patient"] },
+  { id: "discharge", label: "Discharge Summary", icon: FileText, description: "Generate Report", roles: ["Doctor", "Admin"] },
   { id: "blockchain", label: "Blockchain Explorer", icon: Blocks, description: "Transaction Ledger", roles: null },
   { id: "access", label: "Access Control", icon: ShieldCheck, description: "Permissions", roles: null },
   { id: "contract", label: "Smart Contract", icon: FileCode2, description: "EHRRegistry.sol", roles: null },
